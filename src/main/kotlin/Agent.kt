@@ -3,10 +3,14 @@ package com.artembotnev.openai
 import com.artembotnev.openai.domain.model.AgentMessage
 import com.artembotnev.openai.domain.model.AgentResult
 import com.artembotnev.openai.domain.model.AgentRole
-import com.artembotnev.openai.domain.usecase.AppendMessageUseCase
-import com.artembotnev.openai.domain.usecase.ClearHistoryUseCase
-import com.artembotnev.openai.domain.usecase.LoadHistoryUseCase
-import com.artembotnev.openai.domain.usecase.SaveHistoryUseCase
+import com.artembotnev.openai.domain.model.DialogUsage
+import com.artembotnev.openai.domain.usecase.history.AppendMessageUseCase
+import com.artembotnev.openai.domain.usecase.dialogusage.ClearDialogUsageUseCase
+import com.artembotnev.openai.domain.usecase.history.ClearHistoryUseCase
+import com.artembotnev.openai.domain.usecase.dialogusage.LoadDialogUsageUseCase
+import com.artembotnev.openai.domain.usecase.history.LoadHistoryUseCase
+import com.artembotnev.openai.domain.usecase.dialogusage.SaveDialogUsageUseCase
+import com.artembotnev.openai.domain.usecase.history.SaveHistoryUseCase
 import com.openai.client.OpenAIClient
 import com.openai.client.okhttp.OpenAIOkHttpClient
 import com.openai.models.chat.completions.ChatCompletionCreateParams
@@ -24,6 +28,12 @@ internal class Agent(
     val save: SaveHistoryUseCase by inject()
     val load: LoadHistoryUseCase by inject()
     val clear: ClearHistoryUseCase by inject()
+
+    val loadUsage: LoadDialogUsageUseCase by inject()
+    val saveUsage: SaveDialogUsageUseCase by inject()
+    val clearUsage: ClearDialogUsageUseCase by inject()
+
+    private var dialogUsage = loadUsage()
 
     fun send(userText: String): AgentResult {
         val userMessage = AgentMessage(
@@ -43,6 +53,9 @@ internal class Agent(
                 )
             )
 
+            dialogUsage = dialogUsage.accumulate(result)
+            saveUsage(dialogUsage)
+
             return result
         } catch (e: Exception) {
             throw e
@@ -51,6 +64,8 @@ internal class Agent(
 
     fun clearHistory() {
         clear()
+        clearUsage()
+        dialogUsage = DialogUsage()
         append(
             AgentMessage(
                 role = AgentRole.SYSTEM,
@@ -62,6 +77,9 @@ internal class Agent(
     fun getHistory(): List<AgentMessage> {
         return load()
     }
+
+    /** Возвращает накопленный расход токенов за весь текущий диалог. */
+    fun getDialogUsage(): DialogUsage = dialogUsage
 
     private fun requestOpenAi(): AgentResult {
         val params = buildParams()

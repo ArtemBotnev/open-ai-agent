@@ -1,4 +1,4 @@
-package com.artembotnev.openai.domain.data
+package com.artembotnev.openai.data.history
 
 import com.artembotnev.openai.domain.model.AgentMessage
 import kotlinx.serialization.builtins.ListSerializer

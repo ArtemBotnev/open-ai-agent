@@ -1,4 +1,4 @@
-package com.artembotnev.openai.domain.usecase
+package com.artembotnev.openai.domain.usecase.history
 
 import com.artembotnev.openai.domain.model.AgentMessage
 import com.artembotnev.openai.domain.repository.AgentHistoryRepository

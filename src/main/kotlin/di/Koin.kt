@@ -1,14 +1,21 @@
 package com.artembotnev.openai.di
 
 import com.artembotnev.openai.domain.HistoryStorageConfig
-import com.artembotnev.openai.domain.data.AgentHistoryDataSource
-import com.artembotnev.openai.domain.data.AgentHistoryRepositoryJson
-import com.artembotnev.openai.domain.data.JsonAgentHistoryDataSource
+import com.artembotnev.openai.data.history.AgentHistoryDataSource
+import com.artembotnev.openai.data.history.AgentHistoryRepositoryJson
+import com.artembotnev.openai.data.dialogusage.DialogUsageDataSource
+import com.artembotnev.openai.data.dialogusage.DialogUsageRepositoryJson
+import com.artembotnev.openai.data.history.JsonAgentHistoryDataSource
+import com.artembotnev.openai.data.dialogusage.JsonDialogUsageDataSource
 import com.artembotnev.openai.domain.repository.AgentHistoryRepository
-import com.artembotnev.openai.domain.usecase.AppendMessageUseCase
-import com.artembotnev.openai.domain.usecase.ClearHistoryUseCase
-import com.artembotnev.openai.domain.usecase.LoadHistoryUseCase
-import com.artembotnev.openai.domain.usecase.SaveHistoryUseCase
+import com.artembotnev.openai.domain.repository.DialogUsageRepository
+import com.artembotnev.openai.domain.usecase.history.AppendMessageUseCase
+import com.artembotnev.openai.domain.usecase.dialogusage.ClearDialogUsageUseCase
+import com.artembotnev.openai.domain.usecase.history.ClearHistoryUseCase
+import com.artembotnev.openai.domain.usecase.dialogusage.LoadDialogUsageUseCase
+import com.artembotnev.openai.domain.usecase.history.LoadHistoryUseCase
+import com.artembotnev.openai.domain.usecase.dialogusage.SaveDialogUsageUseCase
+import com.artembotnev.openai.domain.usecase.history.SaveHistoryUseCase
 import kotlinx.serialization.json.Json
 import okio.FileSystem
 import okio.Path.Companion.toPath
@@ -31,8 +38,22 @@ val historyModule = module {
     }
     single<AgentHistoryRepository> { AgentHistoryRepositoryJson(get()) }
 
+    single<DialogUsageDataSource> {
+        val cfg = get<HistoryStorageConfig>()
+        JsonDialogUsageDataSource(
+            baseDir = cfg.baseDir,
+            fs = get(),
+            json = get()
+        )
+    }
+    single<DialogUsageRepository> { DialogUsageRepositoryJson(get()) }
+
     factory { LoadHistoryUseCase(get()) }
     factory { SaveHistoryUseCase(get()) }
     factory { AppendMessageUseCase(get()) }
     factory { ClearHistoryUseCase(get()) }
+
+    factory { LoadDialogUsageUseCase(get()) }
+    factory { SaveDialogUsageUseCase(get()) }
+    factory { ClearDialogUsageUseCase(get()) }
 }

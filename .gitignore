@@ -45,4 +45,6 @@ bin/
 ### Mac OS ###
 .DS_Store
 
+### Generated json files ###
 history.json
+usage.json
