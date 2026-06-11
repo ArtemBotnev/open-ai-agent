@@ -2,14 +2,15 @@ package com.artembotnev.openai
 
 import com.artembotnev.openai.di.historyModule
 import com.artembotnev.openai.domain.model.AgentResult
+import com.artembotnev.openai.domain.model.ConversationSummary
 import com.artembotnev.openai.domain.model.DialogUsage
 import org.koin.core.context.GlobalContext.startKoin
 
 //private const val LLM_VERSION = "gpt-5.5"
-private const val LLM_VERSION = "gpt-4.1-nano"
-//private const val LLM_VERSION = "gpt-4o"
+//private const val LLM_VERSION = "gpt-4.1-nano"
+private const val LLM_VERSION = "gpt-4o"
 
-private const val SYSTEM_INSTRUCTION = "Ты полезный ассистент. Отвечай понятно и по делу. Кратко"
+private const val SYSTEM_INSTRUCTION = "Ты обычный помощник, эрудит во всех вопросах. Отвечай кратко"
 
 
 fun main(args: Array<String>) {
@@ -55,6 +56,7 @@ private fun chat(agent: Agent) {
             println("GPT:\n ${result.answer}")
 
             printStatistic(result, agent.getDialogUsage())
+            printSummary(agent.getSummary())
 
         } catch (e: Exception) {
             println("Ошибка: ${e.message}")
@@ -84,5 +86,13 @@ private fun printStatistic(result: AgentResult, dialogUsage: DialogUsage) {
     println("Prompt tokens: ${dialogUsage.promptTokens}")
     println("Completion tokens: ${dialogUsage.completionTokens}")
     println("Total tokens: ${dialogUsage.totalTokens}")
+    println()
+}
+
+private fun printSummary(summary: ConversationSummary) {
+    if (summary.isEmpty) return
+
+    println("Краткое содержание (сжато сообщений: ${summary.coveredCount}):")
+    println(summary.text)
     println()
 }

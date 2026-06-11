@@ -46,5 +46,4 @@ bin/
 .DS_Store
 
 ### Generated json files ###
-history.json
-usage.json
+generated/
