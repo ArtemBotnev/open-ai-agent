@@ -1,5 +1,7 @@
 package com.artembotnev.openai.di
 
+import com.artembotnev.openai.domain.context.ContextManagementStrategy
+import com.artembotnev.openai.domain.context.SlidingWindowContextManagementStrategy
 import com.artembotnev.openai.domain.HistoryStorageConfig
 import com.artembotnev.openai.data.history.AgentHistoryDataSource
 import com.artembotnev.openai.data.history.AgentHistoryRepositoryJson
@@ -24,8 +26,9 @@ import org.koin.dsl.module
 val historyModule = module {
     single { Json { ignoreUnknownKeys = true; encodeDefaults = true; prettyPrint = false } }
     single { FileSystem.SYSTEM }
+    single<ContextManagementStrategy> { SlidingWindowContextManagementStrategy(maxMessages = 10) }
 
-    single { HistoryStorageConfig(baseDir = (System.getProperty("user.home") + "/IdeaProjects/OpenAiFirst").toPath()) }
+    single { HistoryStorageConfig(baseDir = (System.getProperty("user.home") + "/IdeaProjects/OpenAiFirst/generated").toPath()) }
 
     single<AgentHistoryDataSource> {
         val cfg = get<HistoryStorageConfig>()
@@ -36,7 +39,7 @@ val historyModule = module {
             json = get()
         )
     }
-    single<AgentHistoryRepository> { AgentHistoryRepositoryJson(get()) }
+    single<AgentHistoryRepository> { AgentHistoryRepositoryJson(get(), get()) }
 
     single<DialogUsageDataSource> {
         val cfg = get<HistoryStorageConfig>()
