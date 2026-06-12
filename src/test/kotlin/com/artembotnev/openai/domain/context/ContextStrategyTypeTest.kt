@@ -22,14 +22,23 @@ class ContextStrategyTypeTest {
     }
 
     @Test
+    fun `from input parses aliases for branching`() {
+        assertEquals(ContextStrategyType.BRANCHING, ContextStrategyType.fromInput("3"))
+        assertEquals(ContextStrategyType.BRANCHING, ContextStrategyType.fromInput("branching"))
+        assertEquals(ContextStrategyType.BRANCHING, ContextStrategyType.fromInput("branch"))
+    }
+
+    @Test
     fun `uses facts memory is enabled only for sticky facts`() {
         assertFalse(ContextStrategyType.SLIDING_WINDOW.usesFactsMemory)
         assertTrue(ContextStrategyType.STICKY_FACTS.usesFactsMemory)
+        assertFalse(ContextStrategyType.BRANCHING.usesFactsMemory)
     }
 
     @Test
     fun `recent message count is stored in strategy type`() {
         assertEquals(10, ContextStrategyType.SLIDING_WINDOW.recentMessagesCount)
         assertEquals(6, ContextStrategyType.STICKY_FACTS.recentMessagesCount)
+        assertEquals(0, ContextStrategyType.BRANCHING.recentMessagesCount)
     }
 }

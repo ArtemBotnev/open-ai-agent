@@ -20,6 +20,13 @@ internal enum class ContextStrategyType(
         description = "facts + последние 6 сообщений",
         usesFactsMemory = true,
         recentMessagesCount = 6,
+    ),
+    BRANCHING(
+        cliValue = "branching",
+        displayName = "Branching",
+        description = "checkpoint и независимые ветки диалога",
+        usesFactsMemory = false,
+        recentMessagesCount = 0,
     );
 
     companion object {
@@ -27,6 +34,7 @@ internal enum class ContextStrategyType(
             return when (input.trim().lowercase()) {
                 "1", "sliding-window", "sliding_window", "slidingwindow", "sliding" -> SLIDING_WINDOW
                 "2", "sticky-facts", "sticky_facts", "stickyfacts", "sticky" -> STICKY_FACTS
+                "3", "branching", "branch" -> BRANCHING
                 else -> null
             }
         }

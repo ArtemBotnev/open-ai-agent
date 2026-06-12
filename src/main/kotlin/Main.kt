@@ -1,9 +1,11 @@
 package com.artembotnev.openai
 
+import com.artembotnev.openai.branching.DialogBranchManager
 import com.artembotnev.openai.di.historyModule
 import com.artembotnev.openai.domain.context.ContextStrategyType
 import com.artembotnev.openai.domain.model.AgentResult
 import com.artembotnev.openai.domain.model.DialogUsage
+import okio.Path
 import org.koin.core.context.GlobalContext
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
@@ -21,9 +23,10 @@ fun main(args: Array<String>) {
 
 private fun chat(initialStrategy: ContextStrategyType) {
     var currentStrategy = initialStrategy
-    var agent = createAgent(currentStrategy)
+    var currentBranch: String? = null
+    var agent = createAgent(currentStrategy, currentBranch)
 
-    printInstruction(currentStrategy)
+    printInstruction(currentStrategy, currentBranch)
 
     while (true) {
         println()
@@ -35,7 +38,9 @@ private fun chat(initialStrategy: ContextStrategyType) {
             continue
         }
 
-        when (input.lowercase()) {
+        val command = input.substringBefore(' ').lowercase()
+
+        when (command) {
             "/exit" -> {
                 println("Выход.")
                 break
@@ -43,14 +48,28 @@ private fun chat(initialStrategy: ContextStrategyType) {
 
             "/clear" -> {
                 agent.clearHistory()
+                currentBranch = null
                 println("История очищена.")
                 continue
             }
 
             "/strategy" -> {
                 currentStrategy = selectStrategy(currentStrategy)
-                agent = createAgent(currentStrategy)
-                println("Стратегия переключена: ${currentStrategy.displayName}")
+                agent = createAgent(currentStrategy, currentBranch)
+                printInstruction(currentStrategy, currentBranch)
+                continue
+            }
+
+            "/checkpoint", "/switch", "/branches" -> {
+                val updatedBranch = handleBranchingCommand(
+                    input = input,
+                    currentStrategy = currentStrategy,
+                    currentBranch = currentBranch,
+                    agent = agent,
+                ) ?: continue
+
+                currentBranch = updatedBranch
+                agent = createAgent(currentStrategy, currentBranch)
                 continue
             }
         }
@@ -66,21 +85,39 @@ private fun chat(initialStrategy: ContextStrategyType) {
     }
 }
 
-private fun createAgent(strategyType: ContextStrategyType): Agent {
-    configureDependencies(strategyType)
+private fun createAgent(
+    strategyType: ContextStrategyType,
+    currentBranch: String?,
+): Agent {
+    val storageBaseDir = resolveStorageBaseDir(strategyType)
+    configureDependencies(strategyType, storageBaseDir, currentBranch)
     return Agent(
         model = LLM_VERSION,
         systemPrompt = SYSTEM_INSTRUCTION,
         contextStrategyType = strategyType,
+        activeBranch = if (strategyType == ContextStrategyType.BRANCHING) currentBranch else null,
     )
 }
 
-private fun configureDependencies(strategyType: ContextStrategyType) {
+private fun resolveStorageBaseDir(strategyType: ContextStrategyType): Path {
+    val generatedBaseDir = DialogBranchManager.defaultGeneratedBaseDir()
+    return if (strategyType == ContextStrategyType.BRANCHING) {
+        generatedBaseDir / "branching"
+    } else {
+        generatedBaseDir
+    }
+}
+
+private fun configureDependencies(
+    strategyType: ContextStrategyType,
+    storageBaseDir: Path,
+    activeBranch: String?,
+) {
     if (GlobalContext.getOrNull() != null) {
         stopKoin()
     }
 
-    startKoin { modules(historyModule(strategyType)) }
+    startKoin { modules(historyModule(strategyType, storageBaseDir, activeBranch)) }
 }
 
 private fun resolveInitialStrategy(args: Array<String>): ContextStrategyType {
@@ -102,7 +139,7 @@ private fun parseStrategyArg(args: Array<String>): ContextStrategyType? {
 
     if (strategyType == null) {
         println("Неизвестная стратегия: $rawValue")
-        println("Доступные значения: sliding-window, sticky-facts")
+        println("Доступные значения: sliding-window, sticky-facts, branching")
     }
 
     return strategyType
@@ -122,19 +159,77 @@ private fun selectStrategy(currentStrategy: ContextStrategyType? = null): Contex
 
         ContextStrategyType.fromInput(input)?.let { return it }
 
-        println("Неверный выбор. Доступно: 1, 2, sliding-window, sticky-facts")
+        println("Неверный выбор. Доступно: 1, 2, 3, sliding-window, sticky-facts, branching")
     }
 }
 
-private fun printInstruction(strategyType: ContextStrategyType) {
+private fun handleBranchingCommand(
+    input: String,
+    currentStrategy: ContextStrategyType,
+    currentBranch: String?,
+    agent: Agent,
+): String? {
+    if (currentStrategy != ContextStrategyType.BRANCHING) {
+        println("Эти команды доступны только в стратегии Branching.")
+        return null
+    }
+
+    val parts = input.split(Regex("\\s+")).filter { it.isNotBlank() }
+    val command = parts.first().lowercase()
+
+    return try {
+        when (command) {
+            "/checkpoint" -> {
+                require(parts.size == 3) { "Использование: /checkpoint <branch-1> <branch-2>" }
+                val firstBranch = parts[1]
+                val secondBranch = parts[2]
+                val selectedBranch = agent.createCheckpoint(firstBranch, secondBranch)
+                println(
+                    "Checkpoint сохранён. Созданы ветки '$firstBranch' и '$secondBranch'. " +
+                        "Активна ветка '$selectedBranch'."
+                )
+                selectedBranch
+            }
+
+            "/switch" -> {
+                require(parts.size == 2) { "Использование: /switch <branch>" }
+                val branchName = parts[1]
+                require(branchName in agent.getAvailableBranches()) { "Ветка '$branchName' не найдена" }
+                println("Переключено на ветку '$branchName'.")
+                branchName
+            }
+
+            "/branches" -> {
+                val branches = agent.getAvailableBranches()
+                println("Ветки: ${branches.ifEmpty { listOf("нет веток") }.joinToString()}")
+                currentBranch
+            }
+
+            else -> currentBranch
+        }
+    } catch (e: IllegalArgumentException) {
+        println(e.message)
+        null
+    }
+}
+
+private fun printInstruction(strategyType: ContextStrategyType, currentBranch: String?) {
     println("Чат с OpenAI API")
     println("Модель: $LLM_VERSION")
     println("Стратегия: ${strategyType.displayName}")
+    if (strategyType == ContextStrategyType.BRANCHING && currentBranch != null) {
+        println("Текущая ветка: $currentBranch")
+    }
     println()
     println("Команды:")
-    println("/exit     — выйти")
-    println("/clear    — очистить историю")
-    println("/strategy — сменить стратегию")
+    println("/exit        — выйти")
+    println("/clear       — очистить историю")
+    println("/strategy    — сменить стратегию")
+    if (strategyType == ContextStrategyType.BRANCHING) {
+        println("/checkpoint  — создать две ветки и выбрать первую")
+        println("/switch      — переключить ветку")
+        println("/branches    — список веток")
+    }
     println()
 }
 

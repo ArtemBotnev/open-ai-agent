@@ -1,5 +1,6 @@
 package com.artembotnev.openai
 
+import com.artembotnev.openai.domain.context.BranchingPromptContextStrategy
 import com.artembotnev.openai.domain.context.ContextStrategyType
 import com.artembotnev.openai.domain.context.PromptContextStrategy
 import com.artembotnev.openai.domain.facts.DialogFactsAccumulator
@@ -41,6 +42,7 @@ internal class Agent(
     private val model: String,
     private val systemPrompt: String,
     private val contextStrategyType: ContextStrategyType,
+    private val activeBranch: String? = null,
     private val client: OpenAIClient = OpenAIOkHttpClient.fromEnv(),
 ) : KoinComponent {
 
@@ -63,12 +65,7 @@ internal class Agent(
     private var dialogUsage = loadUsage()
 
     fun send(userText: String): AgentResult {
-        val userMessage = AgentMessage(
-            role = AgentRole.USER,
-            content = userText
-        )
-
-        append(userMessage)
+        append(createDialogMessage(role = AgentRole.USER, content = userText))
 
         try {
             val factsUpdateResult = if (contextStrategyType.usesFactsMemory) {
@@ -80,12 +77,7 @@ internal class Agent(
 
             val result = requestOpenAi().merge(factsUpdateResult)
 
-            append(
-                AgentMessage(
-                    role = AgentRole.ASSISTANT,
-                    content = result.answer
-                )
-            )
+            append(createDialogMessage(role = AgentRole.ASSISTANT, content = result.answer))
 
             dialogUsage = dialogUsage.accumulate(result)
             saveUsage(dialogUsage)
@@ -95,6 +87,40 @@ internal class Agent(
             throw e
         }
     }
+
+    fun createCheckpoint(firstBranch: String, secondBranch: String): String {
+        require(contextStrategyType == ContextStrategyType.BRANCHING) {
+            "Checkpoint доступен только в стратегии Branching."
+        }
+
+        val normalizedFirstBranch = normalizeBranchName(firstBranch)
+        val normalizedSecondBranch = normalizeBranchName(secondBranch)
+
+        require(normalizedFirstBranch != normalizedSecondBranch) {
+            "Названия веток должны отличаться"
+        }
+
+        val existingBranches = getAvailableBranches().toSet()
+        require(normalizedFirstBranch !in existingBranches) {
+            "Ветка '$normalizedFirstBranch' уже существует"
+        }
+        require(normalizedSecondBranch !in existingBranches) {
+            "Ветка '$normalizedSecondBranch' уже существует"
+        }
+
+        append(
+            AgentMessage.checkpointMarker(
+                sourceBranch = activeBranch,
+                firstBranch = normalizedFirstBranch,
+                secondBranch = normalizedSecondBranch,
+            )
+        )
+
+        return normalizedFirstBranch
+    }
+
+    fun getAvailableBranches(): List<String> =
+        BranchingPromptContextStrategy.listBranches(getHistory())
 
     fun clearHistory() {
         clear()
@@ -274,6 +300,19 @@ internal class Agent(
     private fun mergeFacts(currentFacts: DialogFacts, newFacts: DialogFacts): DialogFacts =
         DialogFactsAccumulator.merge(currentFacts, newFacts)
 
+    private fun createDialogMessage(role: AgentRole, content: String): AgentMessage = AgentMessage(
+        role = role,
+        content = content,
+        branch = if (contextStrategyType == ContextStrategyType.BRANCHING) activeBranch else null
+    )
+
+    private fun normalizeBranchName(branchName: String): String {
+        val normalizedName = branchName.trim()
+        require(normalizedName.matches(BRANCH_NAME_PATTERN)) {
+            "Имя '$branchName' содержит недопустимые символы"
+        }
+        return normalizedName
+    }
 
     private fun AgentResult.merge(factsUpdateResult: FactsUpdateResult): AgentResult = copy(
         promptTokens = sumUsage(promptTokens, factsUpdateResult.promptTokens),
@@ -308,5 +347,6 @@ internal class Agent(
 
     private companion object {
         val FACT_KEY_PATTERN = Regex("[^a-z0-9]+")
+        val BRANCH_NAME_PATTERN = Regex("[a-zA-Z0-9._-]+")
     }
 }

@@ -10,8 +10,10 @@ import com.artembotnev.openai.data.history.AgentHistoryDataSource
 import com.artembotnev.openai.data.history.AgentHistoryRepositoryJson
 import com.artembotnev.openai.data.history.JsonAgentHistoryDataSource
 import com.artembotnev.openai.domain.HistoryStorageConfig
+import com.artembotnev.openai.domain.context.BranchingPromptContextStrategy
 import com.artembotnev.openai.domain.context.ContextManagementStrategy
 import com.artembotnev.openai.domain.context.ContextStrategyType
+import com.artembotnev.openai.domain.context.NoopContextManagementStrategy
 import com.artembotnev.openai.domain.context.PromptContextStrategy
 import com.artembotnev.openai.domain.context.RecentHistoryPromptContextStrategy
 import com.artembotnev.openai.domain.context.SlidingWindowContextManagementStrategy
@@ -31,14 +33,21 @@ import com.artembotnev.openai.domain.usecase.history.LoadHistoryUseCase
 import com.artembotnev.openai.domain.usecase.history.SaveHistoryUseCase
 import kotlinx.serialization.json.Json
 import okio.FileSystem
-import okio.Path.Companion.toPath
+import okio.Path
 import org.koin.dsl.module
 
-internal fun historyModule(strategyType: ContextStrategyType) = module {
+internal fun historyModule(
+    strategyType: ContextStrategyType,
+    storageBaseDir: Path,
+    activeBranch: String? = null,
+) = module {
     single { Json { ignoreUnknownKeys = true; encodeDefaults = true; prettyPrint = false } }
     single { FileSystem.SYSTEM }
     single<ContextManagementStrategy> {
-        SlidingWindowContextManagementStrategy(maxMessages = strategyType.recentMessagesCount)
+        when (strategyType) {
+            ContextStrategyType.BRANCHING -> NoopContextManagementStrategy
+            else -> SlidingWindowContextManagementStrategy(maxMessages = strategyType.recentMessagesCount)
+        }
     }
     single<PromptContextStrategy> {
         when (strategyType) {
@@ -49,10 +58,12 @@ internal fun historyModule(strategyType: ContextStrategyType) = module {
             ContextStrategyType.STICKY_FACTS -> {
                 StickyFactsPromptContextStrategy(maxRecentMessages = strategyType.recentMessagesCount)
             }
+
+            ContextStrategyType.BRANCHING -> BranchingPromptContextStrategy(activeBranch = activeBranch)
         }
     }
 
-    single { HistoryStorageConfig(baseDir = (System.getProperty("user.home") + "/IdeaProjects/OpenAiFirst/generated").toPath()) }
+    single { HistoryStorageConfig(baseDir = storageBaseDir) }
 
     single<AgentHistoryDataSource> {
         val cfg = get<HistoryStorageConfig>()
