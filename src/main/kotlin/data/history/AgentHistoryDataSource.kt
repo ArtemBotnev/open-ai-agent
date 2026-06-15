@@ -1,7 +1,6 @@
-package com.artembotnev.openai.domain.data
+package com.artembotnev.openai.data.history
 
 import com.artembotnev.openai.domain.model.AgentMessage
-
 
 /**
  * Источник данных для истории диалога с агентом.

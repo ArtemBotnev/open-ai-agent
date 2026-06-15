@@ -1,6 +1,7 @@
-package com.artembotnev.openai.domain.data
+package com.artembotnev.openai.data.history
 
 import com.artembotnev.openai.domain.model.AgentMessage
+import com.artembotnev.openai.domain.model.AgentRole
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import okio.FileSystem
@@ -30,15 +31,15 @@ internal class JsonAgentHistoryDataSource(
         return emptyList()
     }
 
-
     override fun save(all: List<AgentMessage>) {
         if (!fs.exists(baseDir)) fs.createDirectories(baseDir)
-        val text = json.encodeToString(listSer, all)
+        val trimmed = trimToLastRequests(all)
+        val text = json.encodeToString(listSer, trimmed)
         fs.write(filePath) { writeUtf8(text) }
     }
 
     override fun append(message: AgentMessage): List<AgentMessage> {
-        val all = load() + message
+        val all = trimToLastRequests(load() + message)
         save(all)
 
         return all
@@ -48,4 +49,22 @@ internal class JsonAgentHistoryDataSource(
         if (fs.exists(filePath)) fs.delete(filePath)
     }
 
+    private fun trimToLastRequests(history: List<AgentMessage>): List<AgentMessage> {
+        val systemMessages = history.filter { it.role == AgentRole.SYSTEM }
+        val conversationMessages = history.filter { it.role != AgentRole.SYSTEM }
+        val userIndices = conversationMessages.mapIndexedNotNull { index, message ->
+            index.takeIf { message.role == AgentRole.USER }
+        }
+
+        if (userIndices.size <= MAX_REQUESTS) {
+            return systemMessages + conversationMessages
+        }
+
+        val startIndex = userIndices[userIndices.size - MAX_REQUESTS]
+        return systemMessages + conversationMessages.drop(startIndex)
+    }
+
+    private companion object {
+        const val MAX_REQUESTS = 20
+    }
 }

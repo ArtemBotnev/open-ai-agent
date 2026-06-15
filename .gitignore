@@ -45,4 +45,6 @@ bin/
 ### Mac OS ###
 .DS_Store
 
-history.json
+### Generated ###
+context_source/
+generated/

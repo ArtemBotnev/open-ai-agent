@@ -1,30 +1,27 @@
 package com.artembotnev.openai
 
 import com.artembotnev.openai.di.historyModule
+import com.artembotnev.openai.di.llmModule
+import com.artembotnev.openai.domain.llm.Llm
 import com.artembotnev.openai.domain.model.AgentResult
+import org.koin.core.context.GlobalContext
 import org.koin.core.context.GlobalContext.startKoin
 
 //private const val LLM_VERSION = "gpt-5.5"
 //private const val LLM_VERSION = "gpt-4.1-nano"
 private const val LLM_VERSION = "gpt-4o"
 
-private const val SYSTEM_INSTRUCTION = "Ты полезный ассистент. Отвечай понятно и по делу. Кратко"
-
-
 fun main(args: Array<String>) {
-    startKoin { modules(historyModule) }
+    startKoin { modules(historyModule, llmModule(LLM_VERSION)) }
 
-    val agent = Agent(
-        model = LLM_VERSION,
-        systemPrompt = SYSTEM_INSTRUCTION,
-    )
+    val llm = GlobalContext.get().get<Llm>()
 
     printInstruction()
 
-    chat(agent)
+    chat(llm)
 }
 
-private fun chat(agent: Agent) {
+private fun chat(llm: Llm) {
     while (true) {
         println()
         print("Вы: ")
@@ -42,14 +39,14 @@ private fun chat(agent: Agent) {
             }
 
             "/clear" -> {
-                agent.clearHistory()
+                llm.clearHistory()
                 println("История очищена.")
                 continue
             }
         }
 
         try {
-            val result = agent.send(input)
+            val result = llm.send(input)
             println()
             println("GPT:\n ${result.answer}")
 
