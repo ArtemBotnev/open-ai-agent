@@ -139,7 +139,7 @@ internal class OpenAiTaskContextMemoryUpdater(
         const val MAX_WORDS_IN_TASK = 18
         const val MAX_WORDS_PER_BULLET = 14
         val TASK_CONTEXT_SYSTEM_PROMPT = """
-            Ты обновляешь markdown-файл task_context.md для текущего задания пользователя.
+            Ты обновляешь markdown-файл рабочего контекста текущего пользователя, например users/<id>/task_context.md.
             Верни только markdown без пояснений вне секций.
             Формат ответа строго такой:
             ## 1. Текущая задача

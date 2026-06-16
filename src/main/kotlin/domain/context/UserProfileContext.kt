@@ -5,5 +5,6 @@ internal data class UserProfileContext(
     val role: String,
     val stack: List<String>,
     val knowledge: List<String>,
+    val constraints: List<String>,
     val decisions: List<String>,
 )

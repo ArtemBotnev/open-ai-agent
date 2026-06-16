@@ -1,7 +1,7 @@
 package com.artembotnev.openai
 
-import com.artembotnev.openai.di.historyModule
 import com.artembotnev.openai.di.llmModule
+import com.artembotnev.openai.di.storageModule
 import com.artembotnev.openai.domain.llm.Llm
 import com.artembotnev.openai.domain.model.AgentResult
 import org.koin.core.context.GlobalContext
@@ -10,13 +10,17 @@ import org.koin.core.context.GlobalContext.startKoin
 //private const val LLM_VERSION = "gpt-5.5"
 //private const val LLM_VERSION = "gpt-4.1-nano"
 private const val LLM_VERSION = "gpt-4o"
+private const val DEFAULT_USER_ID = "0"
+private val USER_ID_REGEX = Regex("[A-Za-z0-9_-]+")
 
 fun main(args: Array<String>) {
-    startKoin { modules(historyModule, llmModule(LLM_VERSION)) }
+    val userId = readUserId()
+
+    startKoin { modules(storageModule(userId), llmModule(LLM_VERSION)) }
 
     val llm = GlobalContext.get().get<Llm>()
 
-    printInstruction()
+    printInstruction(userId)
 
     chat(llm)
 }
@@ -58,14 +62,25 @@ private fun chat(llm: Llm) {
     }
 }
 
-private fun printInstruction() {
+private fun printInstruction(userId: String) {
     println("Чат с OpenAI API")
     println("Модель: $LLM_VERSION")
+    println("User ID: $userId")
     println()
     println("Команды:")
     println("/exit  — выйти")
     println("/clear — очистить историю")
     println()
+}
+
+private fun readUserId(): String {
+    while (true) {
+        print("Введите user id [$DEFAULT_USER_ID]: ")
+        val raw = readlnOrNull()?.trim().orEmpty()
+        val userId = raw.ifBlank { DEFAULT_USER_ID }
+        if (USER_ID_REGEX.matches(userId)) return userId
+        println("Некорректный user id. Разрешены только буквы, цифры, '_' и '-'.")
+    }
 }
 
 private fun printStatistic(result: AgentResult) {

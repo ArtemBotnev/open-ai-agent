@@ -16,15 +16,21 @@ internal class OpenAiUserProfileMemoryUpdater(
         val context = userProfileDataSource.load()
         val delta = generateDelta(context, userText, assistantText)
         val mergedKnowledge = mergeBullets(context.knowledge, delta.knowledge)
+        val mergedConstraints = mergeBullets(context.constraints, delta.constraints)
         val mergedDecisions = mergeBullets(context.decisions, delta.decisions)
 
-        if (mergedKnowledge == context.knowledge && mergedDecisions == context.decisions) {
+        if (
+            mergedKnowledge == context.knowledge &&
+            mergedConstraints == context.constraints &&
+            mergedDecisions == context.decisions
+        ) {
             return
         }
 
         userProfileDataSource.save(
             context.copy(
                 knowledge = mergedKnowledge,
+                constraints = mergedConstraints,
                 decisions = mergedDecisions,
             )
         )
@@ -43,6 +49,9 @@ internal class OpenAiUserProfileMemoryUpdater(
             appendLine()
             appendLine("Текущие знания пользователя:")
             appendLine(context.knowledge.joinToString(separator = "\n") { "- $it" }.ifBlank { "- нет записей" })
+            appendLine()
+            appendLine("Текущие ограничения пользователя:")
+            appendLine(context.constraints.joinToString(separator = "\n") { "- $it" }.ifBlank { "- нет записей" })
             appendLine()
             appendLine("Текущие решения пользователя и агента:")
             appendLine(context.decisions.joinToString(separator = "\n") { "- $it" }.ifBlank { "- нет записей" })
@@ -75,17 +84,25 @@ internal class OpenAiUserProfileMemoryUpdater(
     private fun parseMarkdownDelta(raw: String): ProfileDelta {
         val normalized = raw.trim()
         val knowledgeStart = normalized.indexOf(KNOWLEDGE_HEADING)
+        val constraintsStart = normalized.indexOf(CONSTRAINTS_HEADING)
         val decisionsStart = normalized.indexOf(DECISIONS_HEADING)
-        if (knowledgeStart < 0 || decisionsStart < 0) return ProfileDelta()
+        if (knowledgeStart < 0 || constraintsStart < 0 || decisionsStart < 0) return ProfileDelta()
 
         val knowledge = extractBullets(
-            normalized.substring(knowledgeStart + KNOWLEDGE_HEADING.length, decisionsStart)
+            normalized.substring(knowledgeStart + KNOWLEDGE_HEADING.length, constraintsStart)
+        )
+        val constraints = extractBullets(
+            normalized.substring(constraintsStart + CONSTRAINTS_HEADING.length, decisionsStart)
         )
         val decisions = extractBullets(
             normalized.substring(decisionsStart + DECISIONS_HEADING.length)
         )
 
-        return ProfileDelta(knowledge = knowledge, decisions = decisions)
+        return ProfileDelta(
+            knowledge = knowledge,
+            constraints = constraints,
+            decisions = decisions,
+        )
     }
 
     private fun extractBullets(section: String): List<String> {
@@ -140,12 +157,14 @@ internal class OpenAiUserProfileMemoryUpdater(
 
     private data class ProfileDelta(
         val knowledge: List<String> = emptyList(),
+        val constraints: List<String> = emptyList(),
         val decisions: List<String> = emptyList(),
     )
 
     private companion object {
         const val KNOWLEDGE_HEADING = "## 2. Знания пользователя"
-        const val DECISIONS_HEADING = "## 3. Решения пользователя и агента"
+        const val CONSTRAINTS_HEADING = "## 3. Ограничения пользователя"
+        const val DECISIONS_HEADING = "## 4. Решения пользователя и агента"
         const val MAX_ITEMS_PER_SECTION = 12
         const val MAX_WORDS_PER_BULLET = 12
         val PROFILE_UPDATE_SYSTEM_PROMPT = """
@@ -154,12 +173,17 @@ internal class OpenAiUserProfileMemoryUpdater(
             - [Краткое, предметное наблюдение — максимум 12 слов]
             - [Второе при необходимости — максимум 12 слов]
             
-            ## 3. Решения пользователя и агента
+            ## 3. Ограничения пользователя
+            - [Краткое ограничение или запрет — максимум 12 слов]
+            - [Второе при необходимости — максимум 12 слов]
+            
+            ## 4. Решения пользователя и агента
             - [Краткое, предметное решение или договорённость — максимум 12 слов]
             - [Второе при необходимости — максимум 12 слов]
             
             **Требования:**
             - В knowledge используй только устойчивые выжимки об уровне, стиле, поведении и предпочтениях пользователя, которые проявляются на протяжении нескольких диалогов или зафиксированы как характерные особенности.
+            - В constraints отражай ограничения, запреты, жёсткие рамки и устойчивые предпочтения, которые агент должен учитывать и может обновлять.
             - В decisions отражай принципы и решения, которые пользователь принимает регулярно или в которых проявляется стабильный подход/договорённость.
             - Не добавляй одноразовые детали, конкретику текущего вопроса или пересказ намерений за одну сессию.
             - Каждый пункт — самостоятельная краткая мысль, не длиннее 12 слов.
@@ -171,11 +195,14 @@ internal class OpenAiUserProfileMemoryUpdater(
             - Предпочитает подробные технические объяснения
             - Часто работает с большими данными
             
-            ## 3. Решения пользователя и агента
+            ## 3. Ограничения пользователя
+            - Не предлагать решения вне Kotlin-стека без запроса
+            
+            ## 4. Решения пользователя и агента
             - Обычно выбирает автоматизацию рутинных задач
             - Согласен на гибкий подход к дедлайнам
             
-            **(В реальных примерах пункты содержат только долговременные характеристики и решения, без одноразовых деталей.)**
+            **(В реальных примерах пункты содержат только долговременные характеристики, ограничения и решения, без одноразовых деталей.)**
             
             ---
             

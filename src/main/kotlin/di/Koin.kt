@@ -27,22 +27,27 @@ import okio.FileSystem
 import okio.Path.Companion.toPath
 import org.koin.dsl.module
 
-val historyModule = module {
+fun storageModule(userId: String) = module {
     single { Json { ignoreUnknownKeys = true; encodeDefaults = true; prettyPrint = false } }
     single { FileSystem.SYSTEM }
 
-    single { HistoryStorageConfig(baseDir = (System.getProperty("user.home") + "/IdeaProjects/OpenAiFirst/generated").toPath()) }
+    single {
+        HistoryStorageConfig(
+            baseDir = (System.getProperty("user.home") + "/IdeaProjects/OpenAiFirst/generated").toPath(),
+            userId = userId,
+        )
+    }
     single {
         ContextStorageConfig(
-            userProfilePath = (System.getProperty("user.home") + "/IdeaProjects/OpenAiFirst/context_source/user_0_profile.md").toPath(),
-            taskContextPath = (System.getProperty("user.home") + "/IdeaProjects/OpenAiFirst/context_source/task_context.md").toPath(),
+            baseDir = (System.getProperty("user.home") + "/IdeaProjects/OpenAiFirst/context_source").toPath(),
+            userId = userId,
         )
     }
 
     single<AgentHistoryDataSource> {
         val cfg = get<HistoryStorageConfig>()
         JsonAgentHistoryDataSource(
-            baseDir = cfg.baseDir,
+            baseDir = cfg.userDir,
             fileName = cfg.fileName,
             fs = get(),
             json = get()
@@ -55,6 +60,7 @@ val historyModule = module {
         MarkdownUserProfileContextDataSource(
             fs = get(),
             path = cfg.userProfilePath,
+            userId = cfg.userId,
         )
     }
     single<TaskContextDataSource> {

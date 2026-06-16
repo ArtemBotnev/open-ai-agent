@@ -7,21 +7,24 @@ import okio.Path
 internal class MarkdownUserProfileContextDataSource(
     private val fs: FileSystem,
     private val path: Path,
+    private val userId: String,
 ) : UserProfileContextDataSource {
 
     override fun load(): UserProfileContext {
         val text = loadMarkdown()
 
         val sectionOne = sectionBody(text, PROFILE_HEADING, KNOWLEDGE_HEADING)
-        val sectionTwo = sectionBody(text, KNOWLEDGE_HEADING, DECISIONS_HEADING)
-        val sectionThree = sectionBody(text, DECISIONS_HEADING, null)
+        val sectionTwo = sectionBody(text, KNOWLEDGE_HEADING, CONSTRAINTS_HEADING)
+        val sectionThree = sectionBody(text, CONSTRAINTS_HEADING, DECISIONS_HEADING)
+        val sectionFour = sectionBody(text, DECISIONS_HEADING, null)
 
         return UserProfileContext(
             userId = parseUserId(sectionOne),
             role = parseRole(sectionOne),
             stack = parseStack(sectionOne),
             knowledge = parseBulletSection(sectionTwo),
-            decisions = parseBulletSection(sectionThree),
+            constraints = parseBulletSection(sectionThree),
+            decisions = parseBulletSection(sectionFour),
         )
     }
 
@@ -46,6 +49,14 @@ internal class MarkdownUserProfileContextDataSource(
             appendLine(KNOWLEDGE_PRELUDE)
             appendLine()
             context.knowledge.forEach { item ->
+                appendLine("- $item")
+            }
+            appendLine()
+            appendLine(CONSTRAINTS_HEADING)
+            appendLine()
+            appendLine(CONSTRAINTS_PRELUDE)
+            appendLine()
+            context.constraints.forEach { item ->
                 appendLine("- $item")
             }
             appendLine()
@@ -135,13 +146,14 @@ internal class MarkdownUserProfileContextDataSource(
 
     private fun defaultContext(): UserProfileContext {
         return UserProfileContext(
-            userId = "0",
+            userId = userId,
             role = "Android-разработчик, senior",
             stack = listOf("Kotlin", "Jetpack Compose"),
             knowledge = listOf(
                 "Пользователь работает с Android-разработкой на Kotlin",
                 "В UI использует Jetpack Compose",
             ),
+            constraints = emptyList(),
             decisions = emptyList(),
         )
     }
@@ -150,9 +162,11 @@ internal class MarkdownUserProfileContextDataSource(
         const val TITLE = "# Профиль пользователя"
         const val PROFILE_HEADING = "## 1. Текущий профиль пользователя"
         const val KNOWLEDGE_HEADING = "## 2. Знания пользователя"
-        const val DECISIONS_HEADING = "## 3. Решения пользователя и агента"
+        const val CONSTRAINTS_HEADING = "## 3. Ограничения пользователя"
+        const val DECISIONS_HEADING = "## 4. Решения пользователя и агента"
         const val PROFILE_NOTE = "> Этот раздел является основным и не редактируется агентами."
         const val KNOWLEDGE_PRELUDE = "Краткая выжимка о знаниях, стиле работы и поведении пользователя по диалогам."
+        const val CONSTRAINTS_PRELUDE = "Краткая выжимка ограничений, запретов и предпочтительных рамок, которые агент должен учитывать."
         const val DECISIONS_PRELUDE = "Краткая выжимка принятых решений, выбранных подходов и договорённостей."
     }
 }
