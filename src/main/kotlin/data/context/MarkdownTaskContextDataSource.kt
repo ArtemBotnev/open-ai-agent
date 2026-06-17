@@ -11,10 +11,16 @@ internal class MarkdownTaskContextDataSource(
 
     override fun load(): TaskContext {
         val text = loadMarkdown()
+        val hasStateSection = text.contains(STATE_HEADING)
+        val statusHeading = if (hasStateSection) STATUS_HEADING else LEGACY_STATUS_HEADING
 
         val taskSection = sectionBody(text, TASK_HEADING, CONTEXT_HEADING)
-        val contextSection = sectionBody(text, CONTEXT_HEADING, STATUS_HEADING)
-        val statusSection = sectionBody(text, STATUS_HEADING, null)
+        val contextSection = sectionBody(
+            text = text,
+            startHeading = CONTEXT_HEADING,
+            endHeading = if (hasStateSection) STATE_HEADING else statusHeading,
+        )
+        val statusSection = sectionBody(text, statusHeading, null)
 
         return TaskContext(
             currentTask = parseCurrentTask(taskSection),
@@ -42,7 +48,7 @@ internal class MarkdownTaskContextDataSource(
                 appendLine("- $item")
             }
             appendLine()
-            appendLine(STATUS_HEADING)
+            appendLine(LEGACY_STATUS_HEADING)
             appendLine()
             appendLine(STATUS_PRELUDE)
             appendLine()
@@ -108,7 +114,9 @@ internal class MarkdownTaskContextDataSource(
         const val TITLE = "# Контекст текущей задачи"
         const val TASK_HEADING = "## 1. Текущая задача"
         const val CONTEXT_HEADING = "## 2. Контекст"
-        const val STATUS_HEADING = "## 3. Решения и статус"
+        const val STATE_HEADING = "## 3. Состояние задачи"
+        const val STATUS_HEADING = "## 4. Решения и статус"
+        const val LEGACY_STATUS_HEADING = "## 3. Решения и статус"
         const val TASK_PRELUDE = "Этот раздел описывает только активную задачу пользователя в текущем диалоге."
         const val TASK_PLACEHOLDER = "Краткое описание активной задачи пользователя."
         const val CONTEXT_PRELUDE = "Краткая выжимка важного технического контекста по текущей задаче. Раздел может обновляться агентом только в рамках текущего задания."

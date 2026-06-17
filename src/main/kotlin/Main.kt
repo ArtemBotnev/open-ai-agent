@@ -2,6 +2,7 @@ package com.artembotnev.openai
 
 import com.artembotnev.openai.di.llmModule
 import com.artembotnev.openai.di.storageModule
+import com.artembotnev.openai.data.context.TaskStateDataSource
 import com.artembotnev.openai.domain.llm.Llm
 import com.artembotnev.openai.domain.model.AgentResult
 import org.koin.core.context.GlobalContext
@@ -19,13 +20,17 @@ fun main(args: Array<String>) {
     startKoin { modules(storageModule(userId), llmModule(LLM_VERSION)) }
 
     val llm = GlobalContext.get().get<Llm>()
+    val taskStateDataSource = GlobalContext.get().get<TaskStateDataSource>()
 
     printInstruction(userId)
 
-    chat(llm)
+    chat(llm, taskStateDataSource)
 }
 
-private fun chat(llm: Llm) {
+private fun chat(
+    llm: Llm,
+    taskStateDataSource: TaskStateDataSource,
+) {
     while (true) {
         println()
         print("Вы: ")
@@ -53,6 +58,7 @@ private fun chat(llm: Llm) {
             val result = llm.send(input)
             println()
             println("GPT:\n ${result.answer}")
+            printTaskState(taskStateDataSource)
 
 //            printStatistic(result)
 
@@ -60,6 +66,11 @@ private fun chat(llm: Llm) {
             println("Ошибка: ${e.message}")
         }
     }
+}
+
+private fun printTaskState(taskStateDataSource: TaskStateDataSource) {
+    val state = taskStateDataSource.load() ?: return
+    println("State: ${state.stage.value} | step: ${state.currentStep} | next: ${state.expectedAction}")
 }
 
 private fun printInstruction(userId: String) {

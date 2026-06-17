@@ -1,8 +1,11 @@
 package com.artembotnev.openai.infra.openai
 
 import com.artembotnev.openai.data.context.TaskContextDataSource
+import com.artembotnev.openai.data.context.TaskStateDataSource
 import com.artembotnev.openai.data.context.UserProfileContextDataSource
 import com.artembotnev.openai.domain.context.TaskContextMemoryUpdater
+import com.artembotnev.openai.domain.context.TaskState
+import com.artembotnev.openai.domain.context.TaskStateMachine
 import com.artembotnev.openai.domain.context.UserProfileMemoryUpdater
 import com.artembotnev.openai.domain.llm.Llm
 import com.artembotnev.openai.domain.model.AgentMessage
@@ -23,6 +26,7 @@ internal class OpenAiLlm(
     private val clear: ClearHistoryUseCase,
     private val userProfileDataSource: UserProfileContextDataSource,
     private val taskContextDataSource: TaskContextDataSource,
+    private val taskStateDataSource: TaskStateDataSource,
     private val userProfileMemoryUpdater: UserProfileMemoryUpdater,
     private val taskContextMemoryUpdater: TaskContextMemoryUpdater,
 ) : Llm {
@@ -102,11 +106,23 @@ internal class OpenAiLlm(
 
         builder.addSystemMessage(userProfileDataSource.loadMarkdown().trim())
 
+        val taskContext = taskContextDataSource.load()
         val taskContextMarkdown = taskContextDataSource.loadMarkdown().trim()
+        val taskState = taskStateDataSource.load()
+            ?: TaskStateMachine.deriveLegacyState(
+                currentTask = taskContext.currentTask,
+                decisionsAndStatus = taskContext.decisionsAndStatus,
+            )
         val history = getHistory().filter { it.role != AgentRole.SYSTEM }
         for (message in history) {
             when (message.role) {
-                AgentRole.USER -> builder.addUserMessage(userMessageWithTaskContext(message.content, taskContextMarkdown))
+                AgentRole.USER -> builder.addUserMessage(
+                    userMessageWithTaskContext(
+                        userText = message.content,
+                        taskContextMarkdown = taskContextMarkdown,
+                        taskState = taskState,
+                    )
+                )
                 AgentRole.ASSISTANT -> builder.addAssistantMessage(message.content)
                 AgentRole.SYSTEM -> Unit
             }
@@ -115,11 +131,20 @@ internal class OpenAiLlm(
         return builder.build()
     }
 
-    private fun userMessageWithTaskContext(userText: String, taskContextMarkdown: String): String {
+    private fun userMessageWithTaskContext(
+        userText: String,
+        taskContextMarkdown: String,
+        taskState: TaskState,
+    ): String {
         if (taskContextMarkdown.isBlank()) return userText
 
         return buildString {
             appendLine(taskContextMarkdown)
+            appendLine()
+            appendLine("Состояние задачи:")
+            appendLine("stage: ${taskState.stage.value}")
+            appendLine("currentStep: ${taskState.currentStep}")
+            appendLine("expectedAction: ${taskState.expectedAction}")
             appendLine()
             appendLine("Сообщение пользователя:")
             append(userText)

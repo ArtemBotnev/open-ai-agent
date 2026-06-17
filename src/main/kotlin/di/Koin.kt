@@ -3,7 +3,9 @@ package com.artembotnev.openai.di
 import com.artembotnev.openai.data.context.MarkdownTaskContextDataSource
 import com.artembotnev.openai.data.context.MarkdownUserProfileContextDataSource
 import com.artembotnev.openai.data.context.TaskContextDataSource
+import com.artembotnev.openai.data.context.TaskStateDataSource
 import com.artembotnev.openai.data.context.UserProfileContextDataSource
+import com.artembotnev.openai.data.context.JsonTaskStateDataSource
 import com.artembotnev.openai.data.history.AgentHistoryDataSource
 import com.artembotnev.openai.data.history.AgentHistoryRepositoryJson
 import com.artembotnev.openai.data.history.JsonAgentHistoryDataSource
@@ -70,6 +72,14 @@ fun storageModule(userId: String) = module {
             path = cfg.taskContextPath,
         )
     }
+    single<TaskStateDataSource> {
+        val cfg = get<HistoryStorageConfig>()
+        JsonTaskStateDataSource(
+            fs = get(),
+            path = cfg.taskStatePath,
+            json = get(),
+        )
+    }
 
     factory { LoadHistoryUseCase(get()) }
     factory { SaveHistoryUseCase(get()) }
@@ -92,6 +102,7 @@ fun llmModule(model: String) = module {
             model = model,
             client = get(),
             taskContextDataSource = get(),
+            taskStateDataSource = get(),
         )
     }
 
@@ -104,6 +115,7 @@ fun llmModule(model: String) = module {
             clear = get(),
             userProfileDataSource = get(),
             taskContextDataSource = get(),
+            taskStateDataSource = get(),
             userProfileMemoryUpdater = get(),
             taskContextMemoryUpdater = get(),
         )

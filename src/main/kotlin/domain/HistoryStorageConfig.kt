@@ -9,4 +9,7 @@ internal data class HistoryStorageConfig(
 ) {
     val userDir: Path
         get() = baseDir / "users" / userId
+
+    val taskStatePath: Path
+        get() = userDir / "task_state.json"
 }
