@@ -1,15 +1,15 @@
 package com.artembotnev.openai.data.context
 
-import com.artembotnev.openai.domain.context.TaskContext
+import com.artembotnev.openai.domain.context.TaskNotesContext
 import okio.FileSystem
 import okio.Path
 
-internal class MarkdownTaskContextDataSource(
+internal class MarkdownTaskNotesDataSource(
     private val fs: FileSystem,
     private val path: Path,
-) : TaskContextDataSource {
+) : TaskNotesDataSource {
 
-    override fun load(): TaskContext {
+    override fun load(): TaskNotesContext {
         val text = loadMarkdown()
         val hasStateSection = text.contains(STATE_HEADING)
         val statusHeading = if (hasStateSection) STATUS_HEADING else LEGACY_STATUS_HEADING
@@ -22,14 +22,14 @@ internal class MarkdownTaskContextDataSource(
         )
         val statusSection = sectionBody(text, statusHeading, null)
 
-        return TaskContext(
+        return TaskNotesContext(
             currentTask = parseCurrentTask(taskSection),
             context = parseBulletSection(contextSection),
             decisionsAndStatus = parseBulletSection(statusSection),
         )
     }
 
-    override fun save(context: TaskContext) {
+    override fun save(context: TaskNotesContext) {
         ensureParentExists()
         val text = buildString {
             appendLine(TITLE)
@@ -102,8 +102,8 @@ internal class MarkdownTaskContextDataSource(
             .filter { it.isNotBlank() }
     }
 
-    private fun defaultContext(): TaskContext {
-        return TaskContext(
+    private fun defaultContext(): TaskNotesContext {
+        return TaskNotesContext(
             currentTask = "",
             context = emptyList(),
             decisionsAndStatus = emptyList(),

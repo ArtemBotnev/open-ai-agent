@@ -1,10 +1,12 @@
 package com.artembotnev.openai
 
+import com.artembotnev.openai.data.task.CurrentTaskDataSource
 import com.artembotnev.openai.di.llmModule
 import com.artembotnev.openai.di.storageModule
-import com.artembotnev.openai.data.context.TaskStateDataSource
+import com.artembotnev.openai.domain.context.UserProfileContext
 import com.artembotnev.openai.domain.llm.Llm
 import com.artembotnev.openai.domain.model.AgentResult
+import com.artembotnev.openai.domain.task.TaskContext
 import org.koin.core.context.GlobalContext
 import org.koin.core.context.GlobalContext.startKoin
 
@@ -20,16 +22,16 @@ fun main(args: Array<String>) {
     startKoin { modules(storageModule(userId), llmModule(LLM_VERSION)) }
 
     val llm = GlobalContext.get().get<Llm>()
-    val taskStateDataSource = GlobalContext.get().get<TaskStateDataSource>()
+    val currentTaskDataSource = GlobalContext.get().get<CurrentTaskDataSource>()
 
     printInstruction(userId)
 
-    chat(llm, taskStateDataSource)
+    chat(llm, currentTaskDataSource)
 }
 
 private fun chat(
     llm: Llm,
-    taskStateDataSource: TaskStateDataSource,
+    currentTaskDataSource: CurrentTaskDataSource,
 ) {
     while (true) {
         println()
@@ -58,7 +60,7 @@ private fun chat(
             val result = llm.send(input)
             println()
             println("GPT:\n ${result.answer}")
-            printTaskState(taskStateDataSource)
+            printCurrentTaskState(currentTaskDataSource)
 
 //            printStatistic(result)
 
@@ -68,9 +70,9 @@ private fun chat(
     }
 }
 
-private fun printTaskState(taskStateDataSource: TaskStateDataSource) {
-    val state = taskStateDataSource.load() ?: return
-    println("State: ${state.stage.value} | step: ${state.currentStep} | next: ${state.expectedAction}")
+private fun printCurrentTaskState(currentTaskDataSource: CurrentTaskDataSource) {
+    val currentTask = currentTaskDataSource.load() ?: return
+    println("Task state: ${currentTask.state.value} | ${currentTask.step}/${currentTask.total} | current: ${currentTask.current}")
 }
 
 private fun printInstruction(userId: String) {

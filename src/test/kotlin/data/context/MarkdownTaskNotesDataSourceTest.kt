@@ -9,7 +9,7 @@ import okio.FileSystem
 import okio.Path.Companion.toPath
 
 @OptIn(ExperimentalPathApi::class)
-internal class MarkdownTaskContextDataSourceTest {
+internal class MarkdownTaskNotesDataSourceTest {
 
     @Test
     fun `loads legacy markdown without explicit task state`() {
@@ -40,7 +40,7 @@ internal class MarkdownTaskContextDataSourceTest {
                 """.trimIndent()
             )
 
-            val dataSource = MarkdownTaskContextDataSource(
+            val dataSource = MarkdownTaskNotesDataSource(
                 fs = FileSystem.SYSTEM,
                 path = file.toString().toPath(),
             )
@@ -60,12 +60,12 @@ internal class MarkdownTaskContextDataSourceTest {
         val dir = createTempDirectory("task-context-save")
         try {
             val file = dir.resolve("task_context.md")
-            val dataSource = MarkdownTaskContextDataSource(
+            val dataSource = MarkdownTaskNotesDataSource(
                 fs = FileSystem.SYSTEM,
                 path = file.toString().toPath(),
             )
 
-            val original = com.artembotnev.openai.domain.context.TaskContext(
+            val original = com.artembotnev.openai.domain.context.TaskNotesContext(
                 currentTask = "Внедрить конечный автомат",
                 context = listOf("Есть legacy формат task_context.md"),
                 decisionsAndStatus = listOf("Парсер должен остаться обратно совместимым"),
