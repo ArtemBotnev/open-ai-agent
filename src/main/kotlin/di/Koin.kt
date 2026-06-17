@@ -7,8 +7,11 @@ import com.artembotnev.openai.data.context.UserProfileContextDataSource
 import com.artembotnev.openai.data.history.AgentHistoryDataSource
 import com.artembotnev.openai.data.history.AgentHistoryRepositoryJson
 import com.artembotnev.openai.data.history.JsonAgentHistoryDataSource
+import com.artembotnev.openai.data.workflow.JsonTaskWorkflowStateDataSource
+import com.artembotnev.openai.data.workflow.TaskWorkflowStateDataSource
 import com.artembotnev.openai.domain.ContextStorageConfig
 import com.artembotnev.openai.domain.HistoryStorageConfig
+import com.artembotnev.openai.domain.TaskStateStorageConfig
 import com.artembotnev.openai.domain.context.TaskContextMemoryUpdater
 import com.artembotnev.openai.domain.context.UserProfileMemoryUpdater
 import com.artembotnev.openai.domain.llm.Llm
@@ -18,6 +21,12 @@ import com.artembotnev.openai.domain.usecase.ClearHistoryUseCase
 import com.artembotnev.openai.domain.usecase.LoadHistoryUseCase
 import com.artembotnev.openai.domain.usecase.SaveHistoryUseCase
 import com.artembotnev.openai.infra.openai.OpenAiLlm
+import com.artembotnev.openai.infra.openai.workflow.DoneSubAgent
+import com.artembotnev.openai.infra.openai.workflow.ExecutionSubAgent
+import com.artembotnev.openai.infra.openai.workflow.OpenAiWorkflowCoordinator
+import com.artembotnev.openai.infra.openai.workflow.OpenAiWorkflowSupport
+import com.artembotnev.openai.infra.openai.workflow.PlanningSubAgent
+import com.artembotnev.openai.infra.openai.workflow.ValidationSubAgent
 import com.artembotnev.openai.infra.profile.OpenAiUserProfileMemoryUpdater
 import com.artembotnev.openai.infra.task.OpenAiTaskContextMemoryUpdater
 import com.openai.client.OpenAIClient
@@ -43,6 +52,12 @@ fun storageModule(userId: String) = module {
             userId = userId,
         )
     }
+    single {
+        TaskStateStorageConfig(
+            baseDir = (System.getProperty("user.home") + "/IdeaProjects/OpenAiFirst/generated").toPath(),
+            userId = userId,
+        )
+    }
 
     single<AgentHistoryDataSource> {
         val cfg = get<HistoryStorageConfig>()
@@ -54,6 +69,15 @@ fun storageModule(userId: String) = module {
         )
     }
     single<AgentHistoryRepository> { AgentHistoryRepositoryJson(get()) }
+    single<TaskWorkflowStateDataSource> {
+        val cfg = get<TaskStateStorageConfig>()
+        JsonTaskWorkflowStateDataSource(
+            baseDir = cfg.userDir,
+            fileName = cfg.fileName,
+            fs = get(),
+            json = get(),
+        )
+    }
 
     single<UserProfileContextDataSource> {
         val cfg = get<ContextStorageConfig>()
@@ -79,6 +103,22 @@ fun storageModule(userId: String) = module {
 
 fun llmModule(model: String) = module {
     single<OpenAIClient> { OpenAIOkHttpClient.fromEnv() }
+    single { OpenAiWorkflowSupport(model = model, client = get(), json = get()) }
+    single { PlanningSubAgent(get()) }
+    single { ExecutionSubAgent(get()) }
+    single { ValidationSubAgent(get()) }
+    single { DoneSubAgent(get()) }
+    single {
+        OpenAiWorkflowCoordinator(
+            workflowStateDataSource = get(),
+            userProfileDataSource = get(),
+            taskContextDataSource = get(),
+            planningSubAgent = get(),
+            executionSubAgent = get(),
+            validationSubAgent = get(),
+            doneSubAgent = get(),
+        )
+    }
 
     single<UserProfileMemoryUpdater> {
         OpenAiUserProfileMemoryUpdater(
@@ -97,13 +137,10 @@ fun llmModule(model: String) = module {
 
     single<Llm> {
         OpenAiLlm(
-            model = model,
-            client = get(),
             append = get(),
             load = get(),
             clear = get(),
-            userProfileDataSource = get(),
-            taskContextDataSource = get(),
+            workflowCoordinator = get(),
             userProfileMemoryUpdater = get(),
             taskContextMemoryUpdater = get(),
         )
