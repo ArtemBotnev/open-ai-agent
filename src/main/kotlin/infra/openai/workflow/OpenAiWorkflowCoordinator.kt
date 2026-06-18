@@ -1,6 +1,7 @@
 package com.artembotnev.openai.infra.openai.workflow
 
 import com.artembotnev.openai.data.context.TaskContextDataSource
+import com.artembotnev.openai.data.context.InvariantDataSource
 import com.artembotnev.openai.data.context.UserProfileContextDataSource
 import com.artembotnev.openai.data.workflow.TaskWorkflowStateDataSource
 import com.artembotnev.openai.domain.model.AgentMessage
@@ -12,6 +13,7 @@ internal class OpenAiWorkflowCoordinator(
     private val workflowStateDataSource: TaskWorkflowStateDataSource,
     private val userProfileDataSource: UserProfileContextDataSource,
     private val taskContextDataSource: TaskContextDataSource,
+    private val invariantDataSource: InvariantDataSource,
     private val planningSubAgent: PlanningSubAgent,
     private val executionSubAgent: ExecutionSubAgent,
     private val validationSubAgent: ValidationSubAgent,
@@ -77,11 +79,21 @@ internal class OpenAiWorkflowCoordinator(
                                 actor = WorkflowActor.PLANNING_AGENT,
                                 stage = WorkflowState.PLANNING,
                                 summary = result.reply,
-                                details = result.plan,
+                                details = planningDetails(result),
                             )
                             .addConversationStep(WorkflowActor.PLANNING_AGENT, result.reply, WorkflowState.PLANNING)
                     )
                     logStep("PLANNING", WorkflowState.PLANNING, result.reply)
+
+                    if (result.invariantConflicts.isNotEmpty()) {
+                        finalAnswer = result.reply.ifBlank {
+                            buildString {
+                                appendLine("Запрос конфликтует с правилами пользователя.")
+                                result.invariantConflicts.forEach { appendLine("- $it") }
+                            }.trim()
+                        }
+                        return responseWithUsage(finalAnswer, hasUsage, totalPromptTokens, totalCompletionTokens, totalTokens)
+                    }
 
                     if (!result.readyForExecution) {
                         finalAnswer = result.reply
@@ -288,8 +300,18 @@ internal class OpenAiWorkflowCoordinator(
             state = TaskWorkflowState(),
             userProfileMarkdown = userProfileDataSource.loadMarkdown().trim(),
             taskContextMarkdown = taskContextDataSource.loadMarkdown().trim(),
+            invariant = invariantDataSource.load(),
+            invariantMarkdown = invariantDataSource.loadMarkdown().trim(),
             history = history,
         )
+    }
+
+    private fun planningDetails(result: PlanningAgentResult): List<String> {
+        return buildList {
+            addAll(result.plan)
+            addAll(result.consideredInvariants.map { "Учтён инвариант: $it" })
+            addAll(result.invariantConflicts.map { "Конфликт с инвариантом: $it" })
+        }
     }
 
     private fun prepareStateForNewMessage(state: TaskWorkflowState, userText: String): TaskWorkflowState {

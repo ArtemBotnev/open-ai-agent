@@ -14,4 +14,7 @@ internal data class ContextStorageConfig(
 
     val taskContextPath: Path
         get() = userDir / "task_context.md"
+
+    val invariantPath: Path
+        get() = userDir / "invariant.md"
 }

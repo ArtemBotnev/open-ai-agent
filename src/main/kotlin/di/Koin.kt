@@ -1,7 +1,9 @@
 package com.artembotnev.openai.di
 
 import com.artembotnev.openai.data.context.MarkdownTaskContextDataSource
+import com.artembotnev.openai.data.context.MarkdownInvariantDataSource
 import com.artembotnev.openai.data.context.MarkdownUserProfileContextDataSource
+import com.artembotnev.openai.data.context.InvariantDataSource
 import com.artembotnev.openai.data.context.TaskContextDataSource
 import com.artembotnev.openai.data.context.UserProfileContextDataSource
 import com.artembotnev.openai.data.history.AgentHistoryDataSource
@@ -94,6 +96,13 @@ fun storageModule(userId: String) = module {
             path = cfg.taskContextPath,
         )
     }
+    single<InvariantDataSource> {
+        val cfg = get<ContextStorageConfig>()
+        MarkdownInvariantDataSource(
+            fs = get(),
+            path = cfg.invariantPath,
+        )
+    }
 
     factory { LoadHistoryUseCase(get()) }
     factory { SaveHistoryUseCase(get()) }
@@ -113,6 +122,7 @@ fun llmModule(model: String) = module {
             workflowStateDataSource = get(),
             userProfileDataSource = get(),
             taskContextDataSource = get(),
+            invariantDataSource = get(),
             planningSubAgent = get(),
             executionSubAgent = get(),
             validationSubAgent = get(),

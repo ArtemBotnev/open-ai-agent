@@ -1,5 +1,6 @@
 package com.artembotnev.openai.infra.openai.workflow
 
+import com.artembotnev.openai.domain.context.Invariant
 import com.artembotnev.openai.domain.model.AgentMessage
 import com.artembotnev.openai.domain.workflow.TaskWorkflowState
 
@@ -8,6 +9,8 @@ internal data class WorkflowAgentContext(
     val state: TaskWorkflowState,
     val userProfileMarkdown: String,
     val taskContextMarkdown: String,
+    val invariant: Invariant,
+    val invariantMarkdown: String,
     val history: List<AgentMessage>,
 )
 
@@ -29,6 +32,8 @@ internal data class PlanningAgentResult(
     val current: String,
     val awaitingConfirmation: Boolean,
     val readyForExecution: Boolean,
+    val consideredInvariants: List<String>,
+    val invariantConflicts: List<String>,
     val usage: WorkflowUsage,
 )
 
