@@ -59,10 +59,32 @@ internal class OpenAiWorkflowCoordinator(
             val context = baseContext.copy(state = state)
             when (state.state) {
                 WorkflowState.PLANNING -> {
+                    if (PlanApprovalDecider.isExplicitApproval(userText, state)) {
+                        state = persist(
+                            transition(
+                                state.withRuntimeState(revisionRequest = "", attempts = 0),
+                                WorkflowState.EXECUTION,
+                                "Пользователь явно утвердил предложенный план",
+                            ).addAgentHandoff(
+                                fromActor = WorkflowActor.PLANNING_AGENT,
+                                toActor = WorkflowActor.EXECUTION_AGENT,
+                                fromState = WorkflowState.PLANNING,
+                                toState = WorkflowState.EXECUTION,
+                                message = "Пользователь явно утвердил предложенный план.",
+                            )
+                        )
+                        return@repeat
+                    }
+
                     val result = planningSubAgent.run(context)
                     accumulate(result.usage)
                     revisionRequest = ""
                     validationAttempts = 0
+                    val planningReply = ensurePlanApprovalQuestion(
+                        reply = result.reply,
+                        awaitingConfirmation = result.awaitingConfirmation,
+                        plan = result.plan,
+                    )
                     state = persist(
                         state
                             .applyPlan(
@@ -78,15 +100,15 @@ internal class OpenAiWorkflowCoordinator(
                             .recordStageResult(
                                 actor = WorkflowActor.PLANNING_AGENT,
                                 stage = WorkflowState.PLANNING,
-                                summary = result.reply,
+                                summary = planningReply,
                                 details = planningDetails(result),
                             )
-                            .addConversationStep(WorkflowActor.PLANNING_AGENT, result.reply, WorkflowState.PLANNING)
+                            .addConversationStep(WorkflowActor.PLANNING_AGENT, planningReply, WorkflowState.PLANNING)
                     )
-                    logStep("PLANNING", WorkflowState.PLANNING, result.reply)
+                    logStep("PLANNING", WorkflowState.PLANNING, planningReply)
 
                     if (result.invariantConflicts.isNotEmpty()) {
-                        finalAnswer = result.reply.ifBlank {
+                        finalAnswer = planningReply.ifBlank {
                             buildString {
                                 appendLine("Запрос конфликтует с правилами пользователя.")
                                 result.invariantConflicts.forEach { appendLine("- $it") }
@@ -95,21 +117,8 @@ internal class OpenAiWorkflowCoordinator(
                         return responseWithUsage(finalAnswer, hasUsage, totalPromptTokens, totalCompletionTokens, totalTokens)
                     }
 
-                    if (!result.readyForExecution) {
-                        finalAnswer = result.reply
-                        return responseWithUsage(finalAnswer, hasUsage, totalPromptTokens, totalCompletionTokens, totalTokens)
-                    }
-
-                    state = persist(
-                        transition(state, WorkflowState.EXECUTION, "План подтверждён пользователем")
-                            .addAgentHandoff(
-                                fromActor = WorkflowActor.PLANNING_AGENT,
-                                toActor = WorkflowActor.EXECUTION_AGENT,
-                                fromState = WorkflowState.PLANNING,
-                                toState = WorkflowState.EXECUTION,
-                                message = result.reply.ifBlank { "План подтверждён и передан в execution." },
-                            )
-                    )
+                    finalAnswer = planningReply
+                    return responseWithUsage(finalAnswer, hasUsage, totalPromptTokens, totalCompletionTokens, totalTokens)
                 }
 
                 WorkflowState.EXECUTION -> {
@@ -309,9 +318,25 @@ internal class OpenAiWorkflowCoordinator(
     private fun planningDetails(result: PlanningAgentResult): List<String> {
         return buildList {
             addAll(result.plan)
+            addAll(result.candidateSummaries.map { "Кандидат: $it" })
             addAll(result.consideredInvariants.map { "Учтён инвариант: $it" })
             addAll(result.invariantConflicts.map { "Конфликт с инвариантом: $it" })
         }
+    }
+
+    private fun ensurePlanApprovalQuestion(
+        reply: String,
+        awaitingConfirmation: Boolean,
+        plan: List<String>,
+    ): String {
+        val sanitized = reply.trim()
+        if (!awaitingConfirmation || plan.isEmpty()) return sanitized
+
+        val approvalQuestion = "Принимаем ли мы этот план в реализацию?"
+        if (sanitized.contains(approvalQuestion)) return sanitized
+        if (sanitized.isBlank()) return approvalQuestion
+
+        return "$sanitized\n\n$approvalQuestion"
     }
 
     private fun prepareStateForNewMessage(state: TaskWorkflowState, userText: String): TaskWorkflowState {

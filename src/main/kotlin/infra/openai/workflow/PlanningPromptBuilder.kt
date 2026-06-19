@@ -6,11 +6,12 @@ internal object PlanningPromptBuilder {
         return buildString {
             appendLine(
                 """
-                Ты subagent планирования в state machine с этапами PLANNING -> EXECUTION -> VALIDATION -> DONE.
+                Ты planning-orchestrator в state machine с этапами PLANNING -> EXECUTION -> VALIDATION -> DONE.
                 Твоя задача:
+                - получить предложения плана от четырёх внутренних planning worker-ов;
+                - суммаризировать их решения и собрать итоговый план, выбирая лучшую часть из каждого уместного предложения;
                 - собрать недостающие требования;
-                - сформировать или уточнить короткий пошаговый план;
-                - дождаться явного подтверждения пользователя перед переходом к EXECUTION.
+                - предложить пользователю один итоговый план и дождаться явного подтверждения.
                 """.trimIndent()
             )
             appendLine()
@@ -26,7 +27,6 @@ internal object PlanningPromptBuilder {
                   "plan": ["шаг 1", "шаг 2"],
                   "current": "текущий ближайший шаг",
                   "awaitingConfirmation": true,
-                  "readyForExecution": false,
                   "consideredInvariants": [],
                   "invariantConflicts": []
                 }
@@ -37,21 +37,25 @@ internal object PlanningPromptBuilder {
                 - Не предлагай решения, которые нарушают хотя бы один инвариант.
                 - Если запрос конфликтует с инвариантами, в "reply" прямо укажи конфликт, откажись предлагать нарушающий вариант и попроси скорректировать запрос или правила.
                 - Если требований не хватает, задай точечные вопросы в "reply", plan можешь оставить пустым или черновым.
-                - Если план уже готов, в "reply" покажи его кратко и попроси пользователя подтвердить.
+                - Если план уже готов, в "reply" покажи только один итоговый план и закончи вопросом: "Принимаем ли мы этот план в реализацию?"
                 - В "reply" используй слово "правило" или "правила", а не "инвариант" или "инварианты".
                 - В "reply" кратко отметь правила, которые повлияли на план или вызвали конфликт.
                 - "consideredInvariants" заполняй только теми инвариантами, которые реально повлияли на решение.
                 - "invariantConflicts" заполняй только реальными конфликтами между запросом и инвариантами.
-                - "readyForExecution" ставь true только если пользователь явно подтвердил план или написал, что всё верно, и при этом нет конфликтов с инвариантами.
-                - Если пользователь внёс правки, обнови plan и снова запроси подтверждение.
-                - Не переходи к кодированию сам, только подготовь данные.
+                - Если пользователь внёс правки, обнови итоговый plan и снова запроси подтверждение.
+                - Не переходи к кодированию сам. Переход в EXECUTION делает только coordinator после явного подтверждения пользователя.
+                - В ответе не показывай все варианты от planning worker-ов. Пользователь должен увидеть только выбранный итог.
                 - План должен быть коротким, конкретным, без воды.
                 """.trimIndent()
             )
         }.trim()
     }
 
-    fun buildUserPrompt(context: WorkflowAgentContext, formattedHistory: String): String {
+    fun buildUserPrompt(
+        context: WorkflowAgentContext,
+        formattedHistory: String,
+        proposals: List<PlanningProposal> = emptyList(),
+    ): String {
         return buildString {
             appendLine("Профиль пользователя:")
             appendLine(context.userProfileMarkdown.ifBlank { "Профиль пуст" })
@@ -70,6 +74,22 @@ internal object PlanningPromptBuilder {
             appendLine("current=${context.state.current}")
             appendLine("waitingForUserConfirmation=${context.state.waitingForUserConfirmation}")
             appendLine()
+            appendLine("Кандидаты от planning worker-ов:")
+            if (proposals.isEmpty()) {
+                appendLine("- Кандидаты не переданы")
+            } else {
+                proposals.forEach { proposal ->
+                    appendLine("[${proposal.agentName}]")
+                    appendLine("summary=${proposal.summary}")
+                    appendLine("task=${proposal.task}")
+                    appendLine("plan=${proposal.plan.joinToString(prefix = "[", postfix = "]")}")
+                    appendLine("current=${proposal.current}")
+                    appendLine("questions=${proposal.questions.joinToString(prefix = "[", postfix = "]")}")
+                    appendLine("consideredInvariants=${proposal.consideredInvariants.joinToString(prefix = "[", postfix = "]")}")
+                    appendLine("invariantConflicts=${proposal.invariantConflicts.joinToString(prefix = "[", postfix = "]")}")
+                    appendLine()
+                }
+            }
             appendLine("Последняя история диалога:")
             appendLine(formattedHistory)
             appendLine()

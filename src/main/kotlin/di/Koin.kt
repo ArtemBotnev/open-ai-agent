@@ -27,7 +27,11 @@ import com.artembotnev.openai.infra.openai.workflow.DoneSubAgent
 import com.artembotnev.openai.infra.openai.workflow.ExecutionSubAgent
 import com.artembotnev.openai.infra.openai.workflow.OpenAiWorkflowCoordinator
 import com.artembotnev.openai.infra.openai.workflow.OpenAiWorkflowSupport
+import com.artembotnev.openai.infra.openai.workflow.ArchitecturePlanningSubAgent
+import com.artembotnev.openai.infra.openai.workflow.DeveloperPlanningSubAgent
+import com.artembotnev.openai.infra.openai.workflow.DesignerPlanningSubAgent
 import com.artembotnev.openai.infra.openai.workflow.PlanningSubAgent
+import com.artembotnev.openai.infra.openai.workflow.RequirementsPlanningSubAgent
 import com.artembotnev.openai.infra.openai.workflow.ValidationSubAgent
 import com.artembotnev.openai.infra.profile.OpenAiUserProfileMemoryUpdater
 import com.artembotnev.openai.infra.task.OpenAiTaskContextMemoryUpdater
@@ -113,7 +117,11 @@ fun storageModule(userId: String) = module {
 fun llmModule(model: String) = module {
     single<OpenAIClient> { OpenAIOkHttpClient.fromEnv() }
     single { OpenAiWorkflowSupport(model = model, client = get(), json = get()) }
-    single { PlanningSubAgent(get()) }
+    single { RequirementsPlanningSubAgent(get()) }
+    single { ArchitecturePlanningSubAgent(get()) }
+    single { DeveloperPlanningSubAgent(get()) }
+    single { DesignerPlanningSubAgent(get()) }
+    single { PlanningSubAgent(get(), get(), get(), get(), get()) }
     single { ExecutionSubAgent(get()) }
     single { ValidationSubAgent(get()) }
     single { DoneSubAgent(get()) }

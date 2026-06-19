@@ -31,9 +31,25 @@ internal data class PlanningAgentResult(
     val plan: List<String>,
     val current: String,
     val awaitingConfirmation: Boolean,
-    val readyForExecution: Boolean,
     val consideredInvariants: List<String>,
     val invariantConflicts: List<String>,
+    val candidateSummaries: List<String>,
+    val usage: WorkflowUsage,
+)
+
+internal data class PlanningProposal(
+    val agentName: String,
+    val summary: String,
+    val task: String,
+    val plan: List<String>,
+    val current: String,
+    val questions: List<String>,
+    val consideredInvariants: List<String>,
+    val invariantConflicts: List<String>,
+)
+
+internal data class PlanningProposalResult(
+    val proposal: PlanningProposal,
     val usage: WorkflowUsage,
 )
 

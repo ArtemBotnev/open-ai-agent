@@ -4,12 +4,23 @@ import kotlinx.serialization.Serializable
 
 internal class PlanningSubAgent(
     private val support: OpenAiWorkflowSupport,
+    private val requirementsPlanningSubAgent: RequirementsPlanningSubAgent,
+    private val architecturePlanningSubAgent: ArchitecturePlanningSubAgent,
+    private val developerPlanningSubAgent: DeveloperPlanningSubAgent,
+    private val designerPlanningSubAgent: DesignerPlanningSubAgent,
 ) {
 
     fun run(context: WorkflowAgentContext): PlanningAgentResult {
+        val proposals = listOf(
+            requirementsPlanningSubAgent.propose(context),
+            architecturePlanningSubAgent.propose(context),
+            developerPlanningSubAgent.propose(context),
+            designerPlanningSubAgent.propose(context),
+        )
         val prompt = PlanningPromptBuilder.buildUserPrompt(
             context = context,
             formattedHistory = support.formatHistory(context.history),
+            proposals = proposals.map(PlanningProposalResult::proposal),
         )
         val systemPrompt = PlanningPromptBuilder.buildSystemPrompt(context)
 
@@ -21,10 +32,13 @@ internal class PlanningSubAgent(
                 plan = context.state.plan,
                 current = context.state.current,
                 awaitingConfirmation = false,
-                readyForExecution = false,
                 consideredInvariants = emptyList(),
                 invariantConflicts = emptyList(),
             )
+
+        val allUsage = proposals.fold(call.usage) { acc, proposal ->
+            acc.plus(proposal.usage)
+        }
 
         return PlanningAgentResult(
             reply = payload.reply.trim(),
@@ -32,10 +46,13 @@ internal class PlanningSubAgent(
             plan = payload.plan.map(String::trim).filter(String::isNotBlank).distinct(),
             current = payload.current.trim(),
             awaitingConfirmation = payload.awaitingConfirmation,
-            readyForExecution = payload.readyForExecution,
             consideredInvariants = payload.consideredInvariants.map(String::trim).filter(String::isNotBlank).distinct(),
             invariantConflicts = payload.invariantConflicts.map(String::trim).filter(String::isNotBlank).distinct(),
-            usage = call.usage,
+            candidateSummaries = proposals.map { proposal ->
+                val summary = proposal.proposal.summary.ifBlank { "Сводка не получена" }
+                "${proposal.proposal.agentName}: $summary"
+            },
+            usage = allUsage,
         )
     }
 
@@ -46,8 +63,22 @@ internal class PlanningSubAgent(
         val plan: List<String> = emptyList(),
         val current: String = "",
         val awaitingConfirmation: Boolean = false,
-        val readyForExecution: Boolean = false,
         val consideredInvariants: List<String> = emptyList(),
         val invariantConflicts: List<String> = emptyList(),
     )
+
+    private fun WorkflowUsage.plus(other: WorkflowUsage): WorkflowUsage {
+        fun sum(left: Long?, right: Long?): Long? {
+            return when {
+                left == null && right == null -> null
+                else -> (left ?: 0L) + (right ?: 0L)
+            }
+        }
+
+        return WorkflowUsage(
+            promptTokens = sum(promptTokens, other.promptTokens),
+            completionTokens = sum(completionTokens, other.completionTokens),
+            totalTokens = sum(totalTokens, other.totalTokens),
+        )
+    }
 }
