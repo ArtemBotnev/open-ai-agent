@@ -1,23 +1,29 @@
-package com.artembotnev.openai.test
+package com.artembotnev.openai
 
-import com.artembotnev.openai.test.entities.AgentMessage
-import com.artembotnev.openai.test.entities.AgentResult
-import com.artembotnev.openai.test.entities.AgentRole
+import com.artembotnev.openai.domain.model.AgentMessage
+import com.artembotnev.openai.domain.model.AgentResult
+import com.artembotnev.openai.domain.model.AgentRole
+import com.artembotnev.openai.domain.usecase.AppendMessageUseCase
+import com.artembotnev.openai.domain.usecase.ClearHistoryUseCase
+import com.artembotnev.openai.domain.usecase.LoadHistoryUseCase
+import com.artembotnev.openai.domain.usecase.SaveHistoryUseCase
 import com.openai.client.OpenAIClient
 import com.openai.client.okhttp.OpenAIOkHttpClient
 import com.openai.models.chat.completions.ChatCompletionCreateParams
+import org.koin.core.component.KoinComponent
+import org.koin.core.component.inject
 import kotlin.time.measureTimedValue
 
 internal class Agent(
     private val model: String,
     private val systemPrompt: String,
-    private val client: OpenAIClient = OpenAIOkHttpClient.fromEnv()
-) {
-    private val history = mutableListOf<AgentMessage>()
+    private val client: OpenAIClient = OpenAIOkHttpClient.fromEnv(),
+) : KoinComponent {
 
-    init {
-        clearHistory()
-    }
+    val append: AppendMessageUseCase by inject()
+    val save: SaveHistoryUseCase by inject()
+    val load: LoadHistoryUseCase by inject()
+    val clear: ClearHistoryUseCase by inject()
 
     fun send(userText: String): AgentResult {
         val userMessage = AgentMessage(
@@ -25,12 +31,12 @@ internal class Agent(
             content = userText
         )
 
-        history.add(userMessage)
+        append(userMessage)
 
         try {
             val result = requestOpenAi()
 
-            history.add(
+            append(
                 AgentMessage(
                     role = AgentRole.ASSISTANT,
                     content = result.answer
@@ -39,14 +45,13 @@ internal class Agent(
 
             return result
         } catch (e: Exception) {
-            history.removeLastOrNull()
             throw e
         }
     }
 
     fun clearHistory() {
-        history.clear()
-        history.add(
+        clear()
+        append(
             AgentMessage(
                 role = AgentRole.SYSTEM,
                 content = systemPrompt
@@ -55,7 +60,7 @@ internal class Agent(
     }
 
     fun getHistory(): List<AgentMessage> {
-        return history.toList()
+        return load()
     }
 
     private fun requestOpenAi(): AgentResult {
@@ -90,6 +95,7 @@ internal class Agent(
         val builder = ChatCompletionCreateParams.builder()
             .model(model)
 
+        val history = getHistory()
         for (message in history) {
             when (message.role) {
                 AgentRole.SYSTEM -> {

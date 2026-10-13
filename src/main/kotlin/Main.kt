@@ -1,6 +1,8 @@
-package com.artembotnev.openai.test
+package com.artembotnev.openai
 
-import com.artembotnev.openai.test.entities.AgentResult
+import com.artembotnev.openai.di.historyModule
+import com.artembotnev.openai.domain.model.AgentResult
+import org.koin.core.context.GlobalContext.startKoin
 
 //private const val LLM_VERSION = "gpt-5.5"
 //private const val LLM_VERSION = "gpt-4.1-nano"
@@ -10,14 +12,21 @@ private const val SYSTEM_INSTRUCTION = "Ты полезный ассистент
 
 
 fun main(args: Array<String>) {
+    startKoin { modules(historyModule) }
+
     val agent = Agent(
         model = LLM_VERSION,
-        systemPrompt = SYSTEM_INSTRUCTION
+        systemPrompt = SYSTEM_INSTRUCTION,
     )
 
     printInstruction()
 
+    chat(agent)
+}
+
+private fun chat(agent: Agent) {
     while (true) {
+        println()
         print("Вы: ")
 
         val input = readlnOrNull()?.trim()
@@ -44,7 +53,7 @@ fun main(args: Array<String>) {
             println()
             println("GPT:\n ${result.answer}")
 
-            printStatistic(result)
+//            printStatistic(result)
 
         } catch (e: Exception) {
             println("Ошибка: ${e.message}")
